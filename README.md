@@ -172,12 +172,12 @@ sgl-nvidia-mega/
 
 ```bash
 pytest test/unit               # CPU only
-pytest test/kernels            # DeepSeek-V4.1-Flash: 4 x GB300; GLM-5.3: 8 x B300
+pytest test/kernels            # DeepSeek-V4.1-Flash: 4 x GB300
 pytest test/e2e                # DeepSeek-V4.1-Flash: 4 x GB300, with SGLANG_NVIDIA_MEGAKERNEL_E2E_MODEL_PATH set
-pytest test/e2e -k glm5_3        # GLM-5.3: 8 x B300, with SGLANG_NVIDIA_MEGAKERNEL_GLM5_3_E2E_MODEL_PATH set
 ```
 
-Kimi K3 GPU and end-to-end suites are not yet part of these commands.
+GLM-5.3 and Kimi K3 GPU and end-to-end suites are not yet part of these commands.
+The GLM-5.3 CPU config and SGLang contract checks are included in `test/unit`.
 
 ## Contributing
 
