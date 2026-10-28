@@ -137,11 +137,22 @@ SGLANG_READS = {
 # The SGLang function bodies this module's stock steps copy, by the digest of their
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
-    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_prepare": "40202da2cffe9560",
+    # before and after sgl-project/sglang#46359, which changed only the
+    # --dcp-replicate-q-proj lines (decode context parallelism, refused here)
+    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_prepare": (
+        "40202da2cffe9560",
+        "4f3bf6125427f3c7",
+    ),
     "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_core": "8a3f638957ef5cd7",
     "srt/layers/attention/dsa/dsa_indexer.py:Indexer.forward_cuda": "805ab11bf040ed52",
     "srt/layers/attention/dsa/dsa_indexer.py:Indexer._fused_q_prepare_and_store": "6ac8fd1c71413a93",
-    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._forward_trtllm": "d31092c1f10bc4a1",
+    # before and after sgl-project/sglang#46990, which stores and reads the KV through
+    # the pool's layer router: on the DSA pool, the same set_mla_kv_buffer and
+    # get_key_buffer calls
+    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._forward_trtllm": (
+        "d31092c1f10bc4a1",
+        "76c87b0740d2b05d",
+    ),
     # the fused top-k page table is the top-k indices on the top-k backends the spec
     # serves (attention_step_reasons); the two padding helpers are copied below
     "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._get_fused_topk_page_table": "b4cc1d5b7eef0b8d",

@@ -148,7 +148,12 @@ SGLANG_READS = {
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
     "srt/models/deepseek_nextn.py:DeepseekModelNextN.forward": "d6329c2e1025a6ef",
-    "srt/layers/logits_processor.py:LogitsProcessor.forward": "825a8fa668abeec6",
+    # before and after sgl-project/sglang#43449, whose lines run only with
+    # --enable-return-aux-hidden-states, which turns speculative decoding off
+    "srt/layers/logits_processor.py:LogitsProcessor.forward": (
+        "825a8fa668abeec6",
+        "813b654dc0599824",
+    ),
     "srt/layers/logits_processor.py:LogitsProcessor._get_logits": "0bfb8f2f72aa5755",
 }
 

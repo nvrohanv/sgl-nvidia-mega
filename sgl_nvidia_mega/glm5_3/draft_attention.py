@@ -83,7 +83,13 @@ SGLANG_READS = {
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
     "srt/models/deepseek_v2.py:DeepseekV2DecoderLayer.forward": "228c19b34f667210",
-    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend.forward_decode": "52e50cfcdda18bea",
+    # before and after sgl-project/sglang#44322 (a ROCm decode context parallel
+    # branch) and sgl-project/sglang#46990 (the KV through the pool's layer router:
+    # on the DSA pool, the same set_mla_kv_buffer and get_key_buffer calls)
+    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend.forward_decode": (
+        "52e50cfcdda18bea",
+        "35f75d4c546f4c15",
+    ),
 }
 
 
