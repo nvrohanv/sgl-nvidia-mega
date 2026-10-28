@@ -5,17 +5,16 @@ calling, pinned on CPU against the installed SGLang.
 
 The megakernel lives outside SGLang, so it reads SGLang by name (its specs plug into
 ``sglang.kernels.plugin_kernels.nvidia``). Every module that imports from
-``sglang`` lists what it reads in ``SGLANG_READS``. A refactor that renames one fails here, naming the file to
-repair, instead of failing at a GPU server's startup. A module whose stock step mirrors
-the body of an SGLang function lists it in ``SGLANG_MIRRORS`` with the digest of its
-code (its tokens without comments or docstring, alike on every Python version), so a
-changed branch fails here too. The checks are static (AST and tokens): no module of
-this package is imported. A file that moved between SGLang versions is named by its
-locations newest first, ``"new.py|old.py"``; the first one the installed SGLang has is
-checked. Run it against each SGLang this package supports, and nightly against SGLang
-main. The GLM-5.3 package reads SGLang's megakernel DSA binding
-view, and its draft spec SGLang's draft capture check marker; against an SGLang without
-them, those reads and pins are skipped, naming each.
+``sglang`` lists what it reads in ``SGLANG_READS``. A refactor that renames one
+fails here, naming the file to repair, instead of failing at a GPU server's startup.
+A module whose stock step mirrors an SGLang function lists it in ``SGLANG_MIRRORS``
+with the digest of its code, so a changed branch fails here too. A file that moved
+between SGLang versions is named newest first, ``"new.py|old.py"``; the first one
+present is checked. The checks are static (AST and tokens): no package module is
+imported. Run them against every supported SGLang and nightly against main. The
+GLM-5.3 package reads SGLang's megakernel DSA binding view, and its draft spec
+SGLang's draft capture check marker; against an SGLang without them, those reads and
+pins are skipped, naming each.
 """
 
 import ast
@@ -336,41 +335,10 @@ def _mirrors(path: Path) -> dict:
     return {}
 
 
-def _code_tokens(source: str):
-    """(kind, text) of each code token of ``source``, as every supported Python
-    tokenizes it: an f-string is one STRING token (Python 3.12 splits it, PEP 701),
-    the text of indentation and line ends is structure only; comments and blank lines
-    are dropped. Each item also carries the token's (start, end) positions."""
-    offsets = [0]
-    for line in source.splitlines(keepends=True):
-        offsets.append(offsets[-1] + len(line))
-    fstring_start = getattr(tokenize, "FSTRING_START", None)
-    fstring_end = getattr(tokenize, "FSTRING_END", None)
-    depth, start = 0, None
-    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
-        if fstring_start is not None and tok.type == fstring_start:
-            depth, start = depth + 1, start if depth else tok.start
-            continue
-        if depth:
-            if tok.type == fstring_end:
-                depth -= 1
-                if not depth:
-                    a = offsets[start[0] - 1] + start[1]
-                    b = offsets[tok.end[0] - 1] + tok.end[1]
-                    yield "STRING", source[a:b], start, tok.end
-            continue
-        kind = tokenize.tok_name[tok.type]
-        if kind in ("COMMENT", "NL", "ENDMARKER"):
-            continue
-        text = "" if kind in ("INDENT", "DEDENT", "NEWLINE") else tok.string
-        yield kind, text, tok.start, tok.end
-
-
 def mirror_digest(path: Path, qualname: str) -> Optional[str]:
     """The digest of a function's code in ``path`` (``Class.method`` or ``function``):
     its decorators, signature and body as tokens, without comments, blank lines or
-    docstring, alike on every Python version; None when the file does not define
-    it."""
+    docstring; None when the file does not define it."""
     scope = _tree(path).body
     *owners, name = qualname.split(".")
     for owner in owners:
@@ -400,10 +368,14 @@ def mirror_digest(path: Path, qualname: str) -> Optional[str]:
     )
     skip = (doc.lineno - first + 1, doc.end_lineno - first + 1) if has_doc else None
     digest = hashlib.sha256()
-    for kind, text, start, end in _code_tokens("".join(lines)):
-        if skip and skip[0] <= start[0] and end[0] <= skip[1]:
+    for tok in tokenize.generate_tokens(io.StringIO("".join(lines)).readline):
+        if tok.type in (tokenize.COMMENT, tokenize.NL):
             continue
-        digest.update(f"{kind}:{text}\n".encode())
+        if skip and skip[0] <= tok.start[0] and tok.end[0] <= skip[1]:
+            continue
+        # indentation depth is structure, not text
+        text = "" if tok.type in (tokenize.INDENT, tokenize.NEWLINE) else tok.string
+        digest.update(f"{tok.type}:{text}\n".encode())
     return digest.hexdigest()[:16]
 
 
@@ -423,7 +395,8 @@ def test_the_mirrored_sglang_code_is_unchanged(path, key, digest):
     assert len(files) == 1, f"{_id(path)}: {pattern} matches {len(files)} files"
     got = mirror_digest(files[0], qualname)
     assert got is not None, f"{_id(path)}: SGLang no longer defines {key}"
-    assert got == digest, (
+    assert got in ((digest,) if isinstance(digest, str) else digest), (
         f"SGLang changed {key}, whose body {_id(path)} mirrors: re-read it, update "
-        f"the mirror, then pin {got!r} in its SGLANG_MIRRORS"
+        f"the mirror, then pin {got!r} in its SGLANG_MIRRORS (a tuple where the "
+        "supported SGLangs differ)"
     )
