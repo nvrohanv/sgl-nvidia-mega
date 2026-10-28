@@ -283,7 +283,7 @@ def model_disable_reasons(model) -> List[str]:
     from sglang.srt.layers.moe.utils import post_experts_output_is_complete
     from sglang.srt.models.deepseek_v2 import DeepseekV2MLP, DeepseekV2MoE
 
-    from sgl_nvidia_mega.glm5_3.plan import SUPPORTED_ROWS
+    from sgl_nvidia_mega.glm5_3.plan import MAX_ROWS
 
     reasons: List[str] = []
     if getattr(model, "num_fused_shared_experts", 0) != 0:
@@ -343,7 +343,7 @@ def model_disable_reasons(model) -> List[str]:
     # boundaries use at verify sizes.
     if uses_cutedsl_ar_fusion():
         reasons.append("the CuTe DSL all-reduce fusion backend is not supported")
-    elif not flashinfer_ar_fusion_applies(max(SUPPORTED_ROWS)):
+    elif not flashinfer_ar_fusion_applies(MAX_ROWS):
         reasons.append(
             "requires the FlashInfer all-reduce + RMSNorm fusion at verify sizes "
             "(--flashinfer-allreduce-fusion-backend not disabled)"
@@ -426,12 +426,17 @@ def build(model, ctx):
     from sgl_nvidia_mega.glm5_3.runtime.compile import compile_stats
     from sgl_nvidia_mega.glm5_3.runtime.executor import GlmMegakernelVerify
 
-    widths = tuple(w for w in ctx.widths if w in plan.SUPPORTED_ROWS)
+    tokens = ctx.tokens_per_request
+    if tokens not in plan.SERVED_TOKENS_PER_REQUEST:
+        raise RuntimeError(
+            f"NVIDIA megakernel: GLM-5.3 / GLM-5.2: {plan.draft_length_reason(tokens)}"
+        )
+    supported = plan.supported_rows(tokens)
+    widths = tuple(w for w in ctx.widths if w in supported)
     if not widths:
         raise RuntimeError(
             f"NVIDIA megakernel: GLM-5.3 / GLM-5.2: widths {list(ctx.widths)} "
-            f"hold none of {list(plan.SUPPORTED_ROWS)} "
-            f"({ctx.tokens_per_request} rows a request)"
+            f"hold none of {list(supported)} ({tokens} rows a request)"
         )
     derived = DerivedWeights()
     providers, families, declined = plan.build_providers(model, widths, derived, SLOTS)
@@ -478,7 +483,7 @@ def build(model, ctx):
                 rows,
                 fused or "all steps stock",
             )
-    log_coverage(widths, ctx.tokens_per_request, sum(derived.mib().values()), rank)
+    log_coverage(widths, tokens, sum(derived.mib().values()), rank)
     errors = ErrorReporter()
     for family in families.values():
         if callable(getattr(family, "error_report", None)):

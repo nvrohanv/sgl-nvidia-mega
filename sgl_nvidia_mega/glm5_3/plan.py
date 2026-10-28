@@ -18,12 +18,33 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Tuple
 
-# Verify rows a request: MTP / EAGLE with 3 draft tokens (+ 1)
-VERIFY_TOKENS_PER_REQUEST = 4
-# The covered widths: 1-4 requests x 4 rows (the MoE engine's forms: one request,
-# two requests, three or four requests)
-SUPPORTED_ROWS = (4, 8, 12, 16)
-MAX_ROWS = max(SUPPORTED_ROWS)
+# Verify rows a request: MTP / EAGLE with top-1 drafts verifies speculative_num_steps
+# draft tokens + 1 (SGLang's speculative_num_draft_tokens). The values served, each
+# tested at its widths: 3 and 5 steps.
+SERVED_TOKENS_PER_REQUEST = (4, 6)
+# The widest covered step (the kernels' row cap)
+MAX_ROWS = 16
+
+
+def supported_rows(tokens_per_request: int) -> Tuple[int, ...]:
+    """The covered widths of verify steps of ``tokens_per_request`` rows a request:
+    every whole number of requests up to ``MAX_ROWS`` rows (4 rows: 1-4 requests, 4 /
+    8 / 12 / 16 rows; 6 rows: 1-2 requests, 6 / 12 rows); none for a value that is not
+    served. Steps with more requests run SGLang's path."""
+    if tokens_per_request not in SERVED_TOKENS_PER_REQUEST:
+        return ()
+    return tuple(range(tokens_per_request, MAX_ROWS + 1, tokens_per_request))
+
+
+def draft_length_reason(tokens_per_request: int) -> str:
+    """Why verify steps of ``tokens_per_request`` rows a request are not served."""
+    tokens = " or ".join(str(t) for t in SERVED_TOKENS_PER_REQUEST)
+    steps = " or ".join(str(t - 1) for t in SERVED_TOKENS_PER_REQUEST)
+    return (
+        f"speculative_num_draft_tokens {tokens_per_request} is not served: MTP / EAGLE "
+        f"with top-1 drafts is served at speculative_num_draft_tokens {tokens} "
+        f"(speculative_num_steps {steps})"
+    )
 
 
 class FamilyDeclined(Exception):

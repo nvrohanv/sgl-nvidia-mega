@@ -40,7 +40,6 @@ except ModuleNotFoundError:  # SGLang before sgl-project/sglang#45389
     from sglang.srt.megakernels.spec import Step
 
 from sgl_nvidia_mega.glm5_3 import HIDDEN, draft_attention, runtime
-from sgl_nvidia_mega.glm5_3.plan import VERIFY_TOKENS_PER_REQUEST
 from sgl_nvidia_mega.glm5_3.runtime import parity
 from sgl_nvidia_mega.glm5_3.runtime.compile import compile_cached, cu_stream
 
@@ -153,8 +152,9 @@ SGLANG_MIRRORS = {
     "srt/layers/logits_processor.py:LogitsProcessor._get_logits": "e772cece6e262a1b",
 }
 
-# draft decode: one row per request; draft extend: 4 per request
-EH_ROWS = (1, 2, 3, 4, 8, 12, 16)
+# draft decode: one row per request (1-4 requests); the draft extend: the covered
+# widths, one row per verify token (eh_rows)
+DECODE_EH_ROWS = (1, 2, 3, 4)
 # the draft-extend graphs select one row per request before the lm_head, so both consumers see B <= 4 rows
 TOP1_DECODE_ROWS = 8
 TOP1_EXTEND_ROWS = 8
@@ -184,6 +184,13 @@ NAN_REPLACEMENT_BITS = 0xF149F2CA
 ONE_HOT_FILL = -torch.finfo(torch.float32).max
 
 
+def eh_rows(widths) -> tuple:
+    """The eh_proj shard's row counts: the draft decode's (``DECODE_EH_ROWS``) and the
+    draft extend's at the covered widths (4 rows a request: 1, 2, 3, 4, 8, 12, 16; 6:
+    1, 2, 3, 4, 6, 12)."""
+    return tuple(sorted({*DECODE_EH_ROWS, *widths}))
+
+
 class FusedDraft:
     """The draft spec's built object: kernels, derived weights and top-1 mailboxes of
     the NextN draft layer, and the draft forward of a captured draft step."""
@@ -206,8 +213,7 @@ class FusedDraft:
         self._attn_agreed = {}  # (mode, rows) -> every rank serves the kernels there
         self._errors = None
         self.widths = tuple(widths)
-        # requests of the widest width: the draft decode's rows (1 a request)
-        self.max_requests = max(self.widths) // VERIFY_TOKENS_PER_REQUEST
+        self.eh_rows = eh_rows(self.widths)
         # SGLang's MegakernelBinding for the draft runner (BuildContext.binding)
         self.binding = binding
         # the top-1 wait bound: TOP1_TIMEOUT_S within SGLang's wait deadline
@@ -236,17 +242,19 @@ class FusedDraft:
             )
         self.eh_weight = w[self.col_off : self.col_off + self.n_local].contiguous()
         specs = compile_specs(
-            eh_rows=EH_ROWS,
+            eh_rows=self.eh_rows,
             top1_rows=(TOP1_DECODE_ROWS, TOP1_EXTEND_ROWS),
             eh_norm=EH_NORM_OPTIONS,
         )
-        for rows in EH_ROWS:
+        for rows in self.eh_rows:
             spec = specs[f"eh_proj_shard_{rows}"]
             self._eh[rows] = (spec[0], _compile(*spec))
         self._front = _compile(*specs["embed_eh_norm"])
         dev = w.device
         # static: only this rank's columns are ever written, the others stay +0
-        self._pad = torch.zeros(max(EH_ROWS), HIDDEN, dtype=torch.bfloat16, device=dev)
+        self._pad = torch.zeros(
+            max(self.eh_rows), HIDDEN, dtype=torch.bfloat16, device=dev
+        )
         self._arm_attention(nextn)
         self.error_record = ErrorRecord(dev)
         for name, rows in (("decode", TOP1_DECODE_ROWS), ("extend", TOP1_EXTEND_ROWS)):
@@ -259,7 +267,7 @@ class FusedDraft:
         # rank's first use of the mailboxes)
         megakernel_agree(
             (
-                EH_ROWS,
+                self.eh_rows,
                 TOP1_DECODE_ROWS,
                 TOP1_EXTEND_ROWS,
                 self._attn_family is not None,
@@ -271,7 +279,7 @@ class FusedDraft:
     def summary(self) -> str:
         """What was built, for SGLang's startup line."""
         return (
-            f"draft: eh_proj shard rows {list(EH_ROWS)}, top-1 rows <= "
+            f"draft: eh_proj shard rows {list(self.eh_rows)}, top-1 rows <= "
             f"{TOP1_DECODE_ROWS} / {TOP1_EXTEND_ROWS}; derived eh_proj shard "
             f"{self.eh_weight.numel() * 2 / 2**20:.1f} MiB; attention kernels: "
             + ("MLA prologue + extend q_a / kv_a GEMM" if self._attn_family else "no")
@@ -283,7 +291,7 @@ class FusedDraft:
         family, why = None, None
         try:
             family = draft_attention.DraftAttentionGlue(nextn)
-            family.compile(EH_ROWS)
+            family.compile(self.eh_rows)
         except ValueError as e:
             family, why = None, str(e)
         whys = runtime.tp_gather([] if why is None else [why])

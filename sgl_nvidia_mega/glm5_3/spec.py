@@ -40,7 +40,7 @@ except ModuleNotFoundError:  # SGLang before sgl-project/sglang#45389
     )
 
 from sgl_nvidia_mega.glm5_3 import HF_CONFIG, MODEL_TYPE, TP_SIZE
-from sgl_nvidia_mega.glm5_3.plan import MAX_ROWS, VERIFY_TOKENS_PER_REQUEST
+from sgl_nvidia_mega.glm5_3.plan import MAX_ROWS, SERVED_TOKENS_PER_REQUEST
 from sgl_nvidia_mega.glm5_3.runtime import SLOTS, parity
 from sgl_nvidia_mega.glm5_3.sm103.hop.constants import CLUSTER, TIMEOUT_NS
 
@@ -154,12 +154,12 @@ SERVER_ARGS = {
     "expert_distribution_recorder_mode": frozenset({None}),
     "moe_dp_size": frozenset({None, 1}),
     "dp_size": frozenset({None, 1}),
-    # MTP / EAGLE with top-1 drafts and 3 draft tokens: verify steps of 4 rows a
-    # request (NEXTN resolves to EAGLE)
+    # MTP / EAGLE with top-1 drafts of 3 or 5 steps: verify steps of 4 or 6 rows a
+    # request (plan.SERVED_TOKENS_PER_REQUEST; NEXTN resolves to EAGLE)
     "speculative_algorithm": frozenset({"EAGLE", "NEXTN"}),
     "speculative_eagle_topk": frozenset({1}),
-    "speculative_num_draft_tokens": frozenset({VERIFY_TOKENS_PER_REQUEST}),
-    "speculative_num_steps": frozenset({VERIFY_TOKENS_PER_REQUEST - 1}),
+    "speculative_num_draft_tokens": frozenset(SERVED_TOKENS_PER_REQUEST),
+    "speculative_num_steps": frozenset(t - 1 for t in SERVED_TOKENS_PER_REQUEST),
     "speculative_adaptive": frozenset(_OFF),
     "enable_multi_layer_eagle": frozenset(_OFF),
     # layouts and communication variants that change the verify step's op sequence
@@ -450,7 +450,7 @@ SPEC = MegakernelSpec(
     # read only the running requests' device KV pages)
     features=frozenset({Feature.SPECULATIVE_DECODING, Feature.KV_OFFLOAD}),
     numerics=NUMERICS,
-    # 1-4 requests of 4 verify rows
+    # whole requests up to 16 verify rows (plan.supported_rows)
     max_rows=MAX_ROWS,
     build=_build,
     api_version=API_VERSION,

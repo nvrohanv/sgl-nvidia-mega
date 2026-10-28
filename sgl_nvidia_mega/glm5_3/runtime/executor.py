@@ -6,8 +6,8 @@
 (``GlmMoeDsaForCausalLM``).
 
 ``GlmMegakernelVerify.plan`` decides from host state alone, identical on every rank,
-whether a step is covered: a target-verify forward of a built width (1-4 requests x 4
-rows) on the absorbed MLA path, recorded while SGLang's decode graph runner captures a
+whether a step is covered: a target-verify forward of a built width (whole requests,
+up to 16 rows) on the absorbed MLA path, recorded while SGLang's decode graph runner captures a
 full graph. The first capture of each width checks, on every rank, that the stock
 attention takes the branches the attention steps copy and the facts the kernels need;
 a reason on any rank stops every rank, naming each rank's reasons (the gather is also

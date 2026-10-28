@@ -5,7 +5,7 @@
 """CuTe DSL small-M NVFP4 MoE in the GLM-5.3 verify step (slot ``moe``); the stock
 step is in ``step``.
 
-At 4 / 8 / 12 / 16 verify rows (1..4 requests of 4 rows) each MoE layer runs the stock
+At the covered widths (1..16 verify rows, ``moe_split``) each MoE layer runs the stock
 router GEMM (``mlp.gate``), ``moe_route_top8`` (the top-8 selection of the stock TRT-LLM
 NVFP4 MoE routing: sigmoid scores, correction bias, renormalized weights x the routed
 scaling factor), one engine launch for the routed experts and the BF16 shared expert, and
@@ -34,11 +34,7 @@ import torch
 
 from sgl_nvidia_mega.glm5_3 import HIDDEN
 from sgl_nvidia_mega.glm5_3.moe.step import MlpSteps
-from sgl_nvidia_mega.glm5_3.plan import (
-    SUPPORTED_ROWS,
-    VERIFY_TOKENS_PER_REQUEST,
-    FamilyDeclined,
-)
+from sgl_nvidia_mega.glm5_3.plan import MAX_ROWS, FamilyDeclined
 from sgl_nvidia_mega.glm5_3.runtime.compile import compile_cached, cu_stream
 
 logger = logging.getLogger(__name__)
@@ -85,6 +81,21 @@ SGLANG_READS = {
 EXPERTS = 256
 TOP_K = 8
 INTER = 256  # routed and shared intermediate size per rank (TP 8)
+# The engine's row groups: at most 4 groups of at most 4 rows (one group: g1, two: g2,
+# three or four: the four-group engine)
+GROUP_ROWS = 4
+MAX_GROUPS = 4
+
+
+def moe_split(rows: int) -> Tuple[int, ...]:
+    """The engine's row groups for ``rows`` verify rows: groups of 4 rows, the
+    remainder last (4 -> (4,), 6 -> (4, 2), 12 -> (4, 4, 4)). The engine's groups are
+    token sets over one expert list, so they need not follow the request boundaries."""
+    split = (GROUP_ROWS,) * (rows // GROUP_ROWS) + (
+        (rows % GROUP_ROWS,) if rows % GROUP_ROWS else ()
+    )
+    assert sum(split) == rows and len(split) <= MAX_GROUPS, (rows, split)
+    return split
 
 
 @dataclass
@@ -193,7 +204,7 @@ class MoeSteps(MlpSteps):
 
     def __init__(self, glue: MoeGlue, rows: int) -> None:
         self.glue, self.rows = glue, rows
-        self.split = (VERIFY_TOKENS_PER_REQUEST,) * (rows // VERIFY_TOKENS_PER_REQUEST)
+        self.split = moe_split(rows)
 
     def forward(self, layer, x, buffer: Optional[torch.Tensor], step):
         glue = self.glue
@@ -244,10 +255,7 @@ class MoeGlue:
     def compile(self, rows: Tuple[int, ...]) -> None:
         import cutlass.cute as cute
 
-        per = VERIFY_TOKENS_PER_REQUEST
-        modes = {
-            self.api.mode_for((per,) * (m // per)) for m in rows if m in SUPPORTED_ROWS
-        }
+        modes = {self.api.mode_for(moe_split(m)) for m in rows if 1 <= m <= MAX_ROWS}
         for name in sorted({"route", "finalize"} | modes):
             kernel, args = self.specs[name]
             self.fn[name] = compile_cached(
@@ -291,7 +299,11 @@ class MoeGlue:
         )
 
     def for_rows(self, m: int) -> Optional[MoeSteps]:
-        if m not in SUPPORTED_ROWS or self.engine is None:
+        if (
+            self.engine is None
+            or not 1 <= m <= MAX_ROWS
+            or self.api.mode_for(moe_split(m)) not in self.fn
+        ):
             return None
         return MoeSteps(self, m)
 
