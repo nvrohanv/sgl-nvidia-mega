@@ -200,8 +200,12 @@ class FusedDraft:
     """The draft spec's built object: kernels, derived weights and top-1 mailboxes of
     the NextN draft layer, and the draft forward of a captured draft step."""
 
-    # the draft offers no draft sampler (BuiltMegakernel)
+    # the draft offers no speculative entries or graph variants (BuiltMegakernel)
     draft_sampler = None
+    draft_loop = None
+    draft_extend = None
+    begin_draft_round = None
+    graph_variants = None
 
     def __init__(self, nextn, *, widths, deadline_s: float, binding=None) -> None:
         self.armed = False

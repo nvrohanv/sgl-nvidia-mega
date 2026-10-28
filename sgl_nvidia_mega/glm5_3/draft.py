@@ -100,6 +100,10 @@ class NoDraftStep:
 
     widths: tuple[int, ...] = ()
     draft_sampler = None
+    draft_loop = None
+    draft_extend = None
+    begin_draft_round = None
+    graph_variants = None
 
     def summary(self) -> str:
         return "GLM-5.3 / GLM-5.2 NextN draft: SGLang's forward (slot draft off)"
