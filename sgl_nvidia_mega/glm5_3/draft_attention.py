@@ -82,8 +82,8 @@ SGLANG_READS = {
 # The SGLang function bodies this module's stock steps copy, by the digest of their
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
-    "srt/models/deepseek_v2.py:DeepseekV2DecoderLayer.forward": "75dbbc5af42358aa",
-    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend.forward_decode": "e626e966849d3d0f",
+    "srt/models/deepseek_v2.py:DeepseekV2DecoderLayer.forward": "228c19b34f667210",
+    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend.forward_decode": "52e50cfcdda18bea",
 }
 
 

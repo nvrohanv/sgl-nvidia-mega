@@ -137,16 +137,16 @@ SGLANG_READS = {
 # The SGLang function bodies this module's stock steps copy, by the digest of their
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
-    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_prepare": "0dc73b5bf34b425d",
-    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_core": "7efd2e1295fcb773",
-    "srt/layers/attention/dsa/dsa_indexer.py:Indexer.forward_cuda": "9c4a15723d0cdcec",
-    "srt/layers/attention/dsa/dsa_indexer.py:Indexer._fused_q_prepare_and_store": "b6af238d01933c24",
-    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._forward_trtllm": "3f81405c1c769955",
+    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_prepare": "40202da2cffe9560",
+    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_core": "8a3f638957ef5cd7",
+    "srt/layers/attention/dsa/dsa_indexer.py:Indexer.forward_cuda": "805ab11bf040ed52",
+    "srt/layers/attention/dsa/dsa_indexer.py:Indexer._fused_q_prepare_and_store": "6ac8fd1c71413a93",
+    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._forward_trtllm": "d31092c1f10bc4a1",
     # the fused top-k page table is the top-k indices on the top-k backends the spec
     # serves (attention_step_reasons); the two padding helpers are copied below
-    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._get_fused_topk_page_table": "ed508f0c5dca7da4",
-    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._pad_topk_indices": "c58eb498ec697ba9",
-    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._pad_trtllm_sparse_page_table": "6d2cc325defc6474",
+    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._get_fused_topk_page_table": "b4cc1d5b7eef0b8d",
+    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._pad_topk_indices": "a6c6754bca9b3add",
+    "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._pad_trtllm_sparse_page_table": "af41a74e3fc0830b",
 }
 
 

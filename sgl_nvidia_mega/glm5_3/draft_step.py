@@ -147,9 +147,9 @@ SGLANG_READS = {
 # The SGLang function bodies this module's draft step copies, by the digest of their
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
-    "srt/models/deepseek_nextn.py:DeepseekModelNextN.forward": "0878d5c88aed2fd3",
-    "srt/layers/logits_processor.py:LogitsProcessor.forward": "7d74136f078afc58",
-    "srt/layers/logits_processor.py:LogitsProcessor._get_logits": "e772cece6e262a1b",
+    "srt/models/deepseek_nextn.py:DeepseekModelNextN.forward": "d6329c2e1025a6ef",
+    "srt/layers/logits_processor.py:LogitsProcessor.forward": "825a8fa668abeec6",
+    "srt/layers/logits_processor.py:LogitsProcessor._get_logits": "0bfb8f2f72aa5755",
 }
 
 # draft decode: one row per request (1-4 requests); the draft extend: the covered
