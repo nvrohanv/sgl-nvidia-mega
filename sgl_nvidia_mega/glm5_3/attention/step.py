@@ -138,12 +138,19 @@ SGLANG_READS = {
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
     # before and after sgl-project/sglang#46359, which changed only the
-    # --dcp-replicate-q-proj lines (decode context parallelism, refused here)
+    # --dcp-replicate-q-proj lines (decode context parallelism, refused here), and
+    # after sgl-project/sglang#45946, which added SAIL-only fp8 conditions and a
+    # FlashMLA-backend-only llama_4_scaling step (the DSA path served here is unchanged)
     "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_prepare": (
         "40202da2cffe9560",
         "4f3bf6125427f3c7",
+        "13dadb6e42fe43f5",
     ),
-    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_core": "8a3f638957ef5cd7",
+    # before and after sgl-project/sglang#45946, which added a SAIL-only fp8 condition
+    "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_core": (
+        "8a3f638957ef5cd7",
+        "69ba2c4967bde418",
+    ),
     "srt/layers/attention/dsa/dsa_indexer.py:Indexer.forward_cuda": "805ab11bf040ed52",
     "srt/layers/attention/dsa/dsa_indexer.py:Indexer._fused_q_prepare_and_store": "6ac8fd1c71413a93",
     # before and after sgl-project/sglang#46990, which stores and reads the KV through
