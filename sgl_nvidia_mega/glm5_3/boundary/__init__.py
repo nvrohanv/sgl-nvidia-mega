@@ -16,7 +16,7 @@ Forms per verify row count (a function of the row count and the layer index
 only, so every rank runs the same hop sequence on its mailboxes):
 
 * MoE family served, rows <= 8: the routing ``o_proj`` hop and the fold hop on
-  MoE layers; dense layers use the plain hops at rows <= 4, stock above.
+  MoE layers; dense layers use the plain hops at rows <= 6, stock above.
 * MoE family served, rows 9..16: the 16-row routing hop and fold on their own
   mailbox; dense layers stock.
 * MoE family stock at this row count (slot ``moe`` not requested), rows <= 8 ("far
