@@ -41,9 +41,36 @@ SHIPPED_SLOTS = (
     # the NextN draft step (built with the draft spec): the fused embedding + eh norms,
     # the sharded eh_proj, the distributed top-1 and the draft layer's MLA prologue
     "draft",
+    # the NextN draft extend runs its MLP on the rows its LM head reads (select_index,
+    # one per request), not on every verify row
+    "draft_rowselect",
 )
+# The kernel units of the TP4 profiles (units.py orders them per step; registry.py
+# composes them per width, runtime/composed.py). The TP8 envelope does not read them.
+LL_SLOTS = (
+    "ll.attention",
+    "ll.attention.kv_norm_fold",
+    "ll.sparse_mla_fd",
+    "ll.hops",
+    "ll.moe.nvfp4",
+    "ll.moe",
+    "ll.draft_eh",
+    "ll.gemm.wk_weights_proj",
+    "ll.gemm.o_proj",
+    "ll.gemm.router",
+    "ll.gemm.dense_down",
+    "ll.gemm.eh_proj",
+    "ll.gemm.lm_head",
+    "ll.gemm.q_b",
+)
+SHIPPED_SLOTS += LL_SLOTS
+# Slots that run only when listed in SLOTS_ENV. ll.moe.alt_stream_priority: the TP4
+# MoE's shared expert on a stream of the greatest priority at <= 6 rows; it gains with
+# FlashInfer's small-batch routing kernel and loses on stock FlashInfer 0.7.2 (+1.2%
+# decode step at 5 rows, TP4 EAGLE 4/1/5).
+OPT_IN_SLOTS = ("ll.moe.alt_stream_priority",)
 # the draft's slots, which build with the draft spec
-DRAFT_SLOTS = frozenset({"draft"})
+DRAFT_SLOTS = frozenset({"draft", "draft_rowselect"})
 # A test and bisect override, not a setting: the slots to run in place of
 # SHIPPED_SLOTS, comma-separated ("" runs every step function's stock code)
 SLOTS_ENV = "SGLANG_NVIDIA_MEGAKERNEL_SLOTS"
@@ -52,6 +79,8 @@ SLOT_NEEDS = (
     ("qkv_a_small_m_shared", "attention"),
     ("dnorm", "qkv_a_small_m_shared"),
     ("dnorm", "hops"),
+    ("draft_rowselect", "draft"),
+    ("ll.attention.kv_norm_fold", "ll.attention"),
 )
 
 
@@ -81,7 +110,7 @@ def ar_fusion_ok(applies, rows: int) -> bool:
 
 def slot_reasons() -> List[str]:
     """Why the requested slots cannot be served ([] when they can)."""
-    known = SHIPPED_SLOTS
+    known = (*SHIPPED_SLOTS, *OPT_IN_SLOTS)
     reasons = [
         f"{SLOTS_ENV}: unknown slot {name!r} (known: {', '.join(known)})"
         for name in sorted(SLOTS - set(known))
@@ -427,8 +456,17 @@ def build(model, ctx):
     """Each requested kernel family's build (weights derived, buffers allocated,
     kernels compiled), the step groups per width, and the executor; ``ctx`` is
     SGLang's BuildContext. A requested family that cannot serve, or ranks that
-    composed different step groups, stop every rank."""
+    composed different step groups, stop every rank. The TP4 profiles compose their
+    step groups from the kernel units (``runtime/composed.py``)."""
     from sglang.srt.runtime_context import get_parallel
+
+    from sgl_nvidia_mega.glm5_3.profile import Profile
+
+    profile = Profile.from_build(model, ctx)
+    if profile.units:
+        from sgl_nvidia_mega.glm5_3.runtime import composed
+
+        return composed.build(model, ctx, profile)
 
     try:
         from sglang.srt.kernel_plugins.nvidia.binding import megakernel_agree
