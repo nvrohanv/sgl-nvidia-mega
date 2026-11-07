@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
 # Adapted from SGLang (Apache-2.0, SGLang Team):
 # python/sglang/srt/layers/moe/moe_runner/flashinfer_trtllm.py (the NVFP4 TRT-LLM weight processing the layout self-test replays).
 """CuTe DSL small-M NVFP4 MoE in the GLM-5.3 verify step (slot ``moe``); the stock

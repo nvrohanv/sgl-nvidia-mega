@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
 # Adapted from SGLang (Apache-2.0, SGLang Team):
 # python/sglang/srt/models/deepseek_v2.py (DeepseekV2ForCausalLM.forward and DeepseekV2Model.forward: the layer loop of a verify step).
 """The executor: one covered MTP verify step of the GLM-5.3 target

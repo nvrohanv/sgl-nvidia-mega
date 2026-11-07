@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
+# Adapted from SGLang (Apache-2.0, SGLang Team):
+# python/sglang/srt/layers/moe/moe_runner/flashinfer_trtllm.py (fused_experts_none_to_flashinfer_trtllm_fp4: the
+# trtllm_fp4_block_scale_moe call), python/sglang/srt/layers/quantization/modelopt_quant.py
+# (ModelOptNvFp4FusedMoEMethod.apply: the FlashInferTrtllmFp4MoeQuantInfo fields).
 """``ll.moe``: the MLP step of the GLM low-latency verify step at TP4 (also built at
 TP8), for ``ll.hops``.
 

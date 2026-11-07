@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
 # Adapted from SGLang (Apache-2.0, SGLang Team):
 # python/sglang/srt/models/deepseek_common/attention_forward_methods/forward_mla.py (forward_absorb_prepare, forward_absorb_core),
 # python/sglang/srt/layers/attention/dsa/dsa_indexer.py (Indexer.forward_cuda, Indexer._fused_q_prepare_and_store),

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
 // Adapted from SGLang (python/sglang/kernels/jit/csrc/distributed/glm_ll_mnnvl_oneshot.cuh of the
 // GLM-5.2 low-latency stack, with the nvcc 13.4 template disambiguator), which adapts FlashInfer v0.7.1
 // include/flashinfer/comm/trtllm_mnnvl_allreduce.cuh (Apache-2.0). Modified for the plugin: every

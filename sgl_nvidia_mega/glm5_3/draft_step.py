@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
 # Adapted from SGLang (Apache-2.0, SGLang Team):
 # python/sglang/srt/models/deepseek_nextn.py (DeepseekModelNextN.forward),
 # python/sglang/srt/layers/logits_processor.py (LogitsProcessor.forward and _get_logits: the decode / draft-extend

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
 # Adapted from SGLang (Apache-2.0, SGLang Team):
 # python/sglang/srt/models/deepseek_v2.py (DeepseekV2DecoderLayer.forward: the MLP / MoE call and its output buffer).
 """The stock dense MLP / MoE of a verify step's layer."""

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /*
- * Adapted from SGLang (Apache-2.0)
- * python/sglang/kernels/jit/csrc/gemm/dsv3_fused_a_gemm.cuh, itself adapted from
+ * Adapted from
  * https://github.com/NVIDIA/TensorRT-LLM/blob/619709fc33bd5dc268f19d6a741fe7ed51c0f8f5/cpp/tensorrt_llm/kernels/dsv3MinLatencyKernels/dsv3FusedAGemm.cu
  *
  * Copyright (c) 2019-2024, NVIDIA CORPORATION.  All rights reserved.
@@ -19,6 +18,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// Portions Copyright 2023-2024 SGLang Team (Apache-2.0)
+// Adapted from SGLang (Apache-2.0) python/sglang/kernels/jit/csrc/gemm/dsv3_fused_a_gemm.cuh, whose
+// header is kept unchanged above.
 
 // The GLM-5 low-latency fused-A GEMM forms, for the MLA fused q_a / kv_a projection and
 // q_b of a TP4 rank (bf16, out = x @ W^T):
