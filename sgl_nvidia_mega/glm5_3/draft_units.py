@@ -721,6 +721,7 @@ class ComposedBuiltDraft:
     draft_extend = None
     begin_draft_round = None
     graph_variants = None
+    speculative_runtime_hooks = None
 
     def __init__(self, model, profile: Profile):
         self.model = model

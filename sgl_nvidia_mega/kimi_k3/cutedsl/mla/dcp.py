@@ -42,6 +42,8 @@ from ..common.primitives import (
     store_shared_words,
     store_words,
     unpack_bf16,
+    wait_deadline_check,
+    wait_deadline_start,
     warp_sum,
     zeros,
 )
@@ -51,6 +53,15 @@ LSE_SENT = 0xFFFFFFFF  # a NaN pattern the merge never sends
 EMPTY_LSE = -3.0e38
 Q_SENT = 0xFFFFFFFF  # four FP8 0xFF bytes: never written (satfinite, canonical NaN)
 PAIR_SENT = 0x80000000  # BF16 pair (+0, -0); sent pairs have no negative zero
+
+
+class _DcpTransportOwner:
+    """Opaque borrowed group plus strong symmetric handles, not tensor inventory."""
+
+    __slots__ = ("group", "handles")
+
+    def __init__(self, group, handles):
+        self.group, self.handles = group, tuple(handles)
 
 
 class DcpBox:
@@ -69,10 +80,15 @@ class DcpBox:
         self.partial = empty((*shape, 512), dtype=torch.bfloat16, device=device)
         self.lse = empty(shape, dtype=torch.float32, device=device)
         tensors = (self.q, self.partial, self.lse)
-        handles = [symm_mem.rendezvous(t, group) for t in tensors]
+        handles = tuple(symm_mem.rendezvous(t, group) for t in tensors)
+        self._transport_owner = _DcpTransportOwner(group, handles)
         self.q_mc = int(handles[0].multicast_ptr or 0)
-        if not self.q_mc:
+        if self.q_mc <= 0:
             raise RuntimeError("Kimi K3 specialized MLA DCP needs multicast memory")
+        for handle in handles:
+            pointers = handle.buffer_ptrs
+            if len(pointers) != size or any(int(pointer) <= 0 for pointer in pointers):
+                raise RuntimeError("Kimi K3 MLA DCP symmetric peer geometry differs")
         i64 = dict(dtype=torch.int64, device=device)
         self.peers = torch.tensor(handles[1].buffer_ptrs, **i64)
         self.lse_peers = torch.tensor(handles[2].buffer_ptrs, **i64)
@@ -84,6 +100,14 @@ class DcpBox:
         self.rows_lse = torch.empty(rows, dtype=torch.float32, device=device)
         torch.accelerator.synchronize(device)
         torch.distributed.barrier(group=group)
+
+    @property
+    def handles(self):
+        return self._transport_owner.handles
+
+    @property
+    def device_group(self):
+        return self._transport_owner.group
 
     def mc(self, parity):
         """The q mailbox multicast address of ``parity``."""
@@ -99,9 +123,13 @@ class DcpValue:
     polled rows in FP32
     (one BF16 rounding, re-arming what it read) into shared memory, and W_UV (BF16
     MMA, FP32 accumulation) and the sigmoid gate follow as in MlaValue: warp w owns
-    outputs 32 (w // 4) + 8 (w % 4) .. + 7. Rows are tokens, ``q`` per request."""
+    outputs 32 (w // 4) + 8 (w % 4) .. + 7. Rows are tokens, ``q`` per request.
+    Both remote waits use the required positive compile-time ``deadline_ns``."""
 
-    def __init__(self, heads, size, batch, sms=148, q=1):
+    def __init__(self, heads, size, batch, sms=148, q=1, *, deadline_ns):
+        if type(deadline_ns) is not int or not 0 < deadline_ns < (1 << 63):
+            raise ValueError("MLA DCP requires a positive int64 wait deadline")
+        self.deadline_ns = deadline_ns
         self.heads, self.size, self.batch = heads, size, batch
         self.q = q
         # Push-only CTAs (z > 0) spread the NVLink stores over more SMs: up to one
@@ -182,7 +210,11 @@ class DcpValue:
             if lane < D:
                 source = at(lbox, lane, t0 + warp, head)
                 word = load_volatile(source)[0]
+                started, polls = Int64(0), Int32(0)
+                if word == Uint32(LSE_SENT):
+                    started = wait_deadline_start(self.deadline_ns)
                 while word == Uint32(LSE_SENT):
+                    polls = wait_deadline_check(started, polls, self.deadline_ns)
                     word = load_volatile(source)[0]
                 store_words(source, (Uint32(LSE_SENT),))
                 lse = bits_float(word)
@@ -212,7 +244,13 @@ class DcpValue:
                     loads = [load_volatile(source, count=4) for source in sources]
                     for i in cutlass.range_constexpr(len(sources)):
                         words = loads[i]
+                        started, polls = Int64(0), Int32(0)
+                        if not published(words):
+                            started = wait_deadline_start(self.deadline_ns)
                         while not published(words):
+                            polls = wait_deadline_check(
+                                started, polls, self.deadline_ns
+                            )
                             words = load_volatile(sources[i], count=4)
                         store_words(sources[i], (Uint32(PAIR_SENT),) * 4)
                         w = scales[r, s0 + i]
@@ -255,7 +293,9 @@ class DcpValue:
 
 
 @cache
-def compile_value(heads, size, batch, cap, uv, pitch, device, sms=148, q=1):
+def compile_value(
+    heads, size, batch, cap, uv, pitch, device, sms=148, q=1, *, deadline_ns
+):
     """DcpValue of one batch (``q`` rows per request); ``uv``: the (shape, stride,
     dtype) of W_UV, ``pitch``: the projected rows' (the gate follows the 2112 query /
     KV columns)."""
@@ -272,7 +312,9 @@ def compile_value(heads, size, batch, cap, uv, pitch, device, sms=148, q=1):
     args: tuple = (rows, rows_lse, lens, box, lbox, peers, peers, mailbox, w_uv)
     args += (gate, lens, output, Int32(0), Int32(0), make_fake_stream())
     with torch.accelerator.device_index(device):
-        return cute.compile(DcpValue(heads, size, batch, sms, q), *args)
+        return cute.compile(
+            DcpValue(heads, size, batch, sms, q, deadline_ns=deadline_ns), *args
+        )
 
 
 _WORKSPACE: dict[tuple[torch.device, int], torch.Tensor] = {}
@@ -338,6 +380,7 @@ def stock_decode(
         is_var_seq=True,
         is_var_split_kv=False,
         compute_capability=arch,
+        has_local_visible_lens=False,
         skip_correction_threshold=8.0,
         is_workspace_size_zero=size == 0,
         fold_sq_factor=fold,

@@ -11,6 +11,9 @@ A module whose stock step mirrors an SGLang function lists it in ``SGLANG_MIRROR
 with the digest of its code, so a changed branch fails here too. A file that moved
 between SGLang versions is named newest first, ``"new.py|old.py"``; the first one
 present is checked. A read name such as "replication|layout" accepts either field.
+An explicitly guarded opt-in extension uses ``SGLANG_OPTIONAL_READS``: its
+file may be absent, but all declared names must match when it is installed.
+The feature's tests must cover rejection when its extension is unavailable.
 The checks are static (AST and tokens): no package module is
 imported. Run them against every supported SGLang and nightly against main. The
 GLM-5.3 package reads SGLang's megakernel DSA binding view, and its draft spec
@@ -75,11 +78,11 @@ def _provided(path: Path) -> frozenset:
     return frozenset(names)
 
 
-def _declared(path: Path) -> dict:
-    """The module's ``SGLANG_READS``, or {} without one."""
+def _declared(path: Path, kind: str = "SGLANG_READS") -> dict:
+    """The module's named source contract, or {} without one."""
     for node in _tree(path).body:
         if isinstance(node, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == "SGLANG_READS" for t in node.targets
+            isinstance(t, ast.Name) and t.id == kind for t in node.targets
         ):
             return ast.literal_eval(node.value)
     return {}
@@ -96,7 +99,9 @@ def _sglang_imports(path: Path) -> set:
 
 
 READERS = [
-    p for p in sorted(PACKAGE.rglob("*.py")) if _declared(p) or _sglang_imports(p)
+    p
+    for p in sorted(PACKAGE.rglob("*.py"))
+    if _declared(p) or _declared(p, "SGLANG_OPTIONAL_READS") or _sglang_imports(p)
 ]
 
 
@@ -106,7 +111,8 @@ def _id(path: Path) -> str:
 
 @pytest.mark.parametrize("path", READERS, ids=_id)
 def test_every_sglang_import_is_declared(path):
-    declared = {n for names in _declared(path).values() for n in names}
+    contracts = _declared(path) | _declared(path, "SGLANG_OPTIONAL_READS")
+    declared = {n for names in contracts.values() for n in names}
     undeclared = _sglang_imports(path) - declared
     assert not undeclared, f"{_id(path)}: declare {sorted(undeclared)} in SGLANG_READS"
 
@@ -114,20 +120,27 @@ def test_every_sglang_import_is_declared(path):
 @pytest.mark.parametrize("path", READERS, ids=_id)
 def test_sglang_provides_what_the_plugin_reads(path):
     missing, unchecked = [], []
-    for pattern, names in _declared(path).items():
+    required = _declared(path)
+    optional = _declared(path, "SGLANG_OPTIONAL_READS")
+    assert not required.keys() & optional.keys(), (
+        "contract cannot be both required and optional"
+    )
+    for pattern, names in (required | optional).items():
         files = _files(pattern)
+        if not files and pattern in optional:
+            continue
         assert files, f"{_id(path)}: no file matches {pattern}"
         provided = frozenset().union(*map(_provided, files))
-        optional = []
+        skipped = []
         if files == _files(BINDING) and not _has_dsa_view():
-            optional = [n for n in names if n.split("(", 1)[0] in DSA_VIEW_NAMES]
+            skipped = [n for n in names if n.split("(", 1)[0] in DSA_VIEW_NAMES]
             reason = NO_DSA_VIEW
         if files == _files(DRAFT_CHECK) and not _has_draft_check():
-            optional = [n for n in names if n in DRAFT_CHECK_NAMES]
+            skipped = [n for n in names if n in DRAFT_CHECK_NAMES]
             reason = NO_DRAFT_CHECK
-        if optional:
-            unchecked.append(f"{reason}: {_id(path)} reads {sorted(optional)}")
-            names = [n for n in names if n not in optional]
+        if skipped:
+            unchecked.append(f"{reason}: {_id(path)} reads {sorted(skipped)}")
+            names = [n for n in names if n not in skipped]
         missing += [
             f"{pattern}: {n}"
             for n in names
@@ -270,10 +283,13 @@ def test_every_binding_callable_the_plugin_reads_is_tolerated():
         "HybridPoolView",
         "HybridStepView",
         "PreparationView",
+        "aux_hidden_states",
         "block_table",
         "cache",
         "capacity",
         "conv",
+        "intermediate_conv_window",
+        "intermediate_ssm",
         "kda",
         "layer_mapping",
         "logical_dtype",
@@ -291,6 +307,8 @@ def test_every_binding_callable_the_plugin_reads_is_tolerated():
         "state_indices",
         "storage_dtype",
         "temporal",
+        "tokens_per_request",
+        "verify_scratch_indices",
         "kv_pool",
         "trtllm_attn",
         "uniform_fp8",
@@ -318,6 +336,9 @@ def test_every_binding_callable_the_plugin_reads_is_tolerated():
         "multi_ctas_kv_counter_buffer",
         "index_page_size",
     }
+    # Startup agreement is a host preparation API, not a borrowed runtime-view
+    # callable to replace with data. Keep its exact signature covered separately.
+    preparation = {"megakernel_agree"}
     for path in READERS:
         names = {
             n.split("(", 1)[0]
@@ -325,9 +346,23 @@ def test_every_binding_callable_the_plugin_reads_is_tolerated():
             if _files(pattern) == _files(BINDING)
             for n in declared
         }
-        untolerated = names - callables - data - _binding_functions()
+        untolerated = names - callables - data - preparation - _binding_functions()
         untolerated = {n for n in untolerated if not n.startswith("get_")}
         assert not untolerated, f"{_id(path)}: {sorted(untolerated)}"
+
+
+def test_native_preparation_agreement_signature():
+    binding = _tree(_files(BINDING)[0])
+    agree = next(
+        node
+        for node in binding.body
+        if isinstance(node, ast.FunctionDef) and node.name == "megakernel_agree"
+    )
+    assert [arg.arg for arg in agree.args.args] == ["value"]
+    assert [arg.arg for arg in agree.args.kwonlyargs] == ["what", "group"]
+    assert agree.args.kw_defaults[0] is None
+    assert ast.literal_eval(agree.args.kw_defaults[1]) is None
+    assert agree.args.vararg is None and agree.args.kwarg is None
 
 
 def _mirrors(path: Path) -> dict:
@@ -405,3 +440,60 @@ def test_the_mirrored_sglang_code_is_unchanged(path, key, digest):
         f"the mirror, then pin {got!r} in its SGLANG_MIRRORS (a tuple where the "
         "supported SGLangs differ)"
     )
+
+
+def _built_classes() -> dict:
+    """Each package class SGLang may hold as a built megakernel (one with plan,
+    forward and summary, its own or a package base's), with what it assigns."""
+    classes = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        for node in ast.walk(_tree(path)):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            names, methods = set(), set()
+            for item in node.body:
+                if isinstance(item, ast.AnnAssign):
+                    names |= {
+                        n.id for n in ast.walk(item.target) if isinstance(n, ast.Name)
+                    }
+                elif isinstance(item, ast.Assign):
+                    names |= {
+                        n.id
+                        for target in item.targets
+                        for n in ast.walk(target)
+                        if isinstance(n, ast.Name)
+                    }
+                elif isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    methods.add(item.name)
+                    names |= {
+                        n.attr
+                        for n in ast.walk(item)
+                        if isinstance(n, ast.Attribute)
+                        and isinstance(n.ctx, ast.Store)
+                        and isinstance(n.value, ast.Name)
+                        and n.value.id == "self"
+                    }
+            bases = [b.id for b in node.bases if isinstance(b, ast.Name)]
+            classes[node.name] = (path, bases, names, methods)
+
+    def inherited(name: str, index: int) -> set:
+        if name not in classes:
+            return set()
+        entry = classes[name]
+        return set(entry[index]).union(*(inherited(b, index) for b in entry[1]))
+
+    return {
+        f"{_id(entry[0])}::{name}": inherited(name, 2)
+        for name, entry in classes.items()
+        if {"plan", "forward", "summary"} <= inherited(name, 3)
+    }
+
+
+BUILT = _built_classes()
+
+
+@pytest.mark.parametrize("name", sorted(BUILT))
+def test_every_built_object_defines_speculative_runtime_hooks(name):
+    # SGLang's BuiltMegakernel requires the member (None without a factory) and
+    # reads it unguarded under SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION.
+    assert "speculative_runtime_hooks" in BUILT[name], name

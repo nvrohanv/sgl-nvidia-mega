@@ -222,6 +222,7 @@ class FusedDraft:
     draft_extend = None
     begin_draft_round = None
     graph_variants = None
+    speculative_runtime_hooks = None
 
     def __init__(self, nextn, *, widths, deadline_s: float, binding=None) -> None:
         self.armed = False
