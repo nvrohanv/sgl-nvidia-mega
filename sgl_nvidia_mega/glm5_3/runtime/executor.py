@@ -78,10 +78,9 @@ SGLANG_READS = {
         "is_in_breakable_cuda_graph",
     ),
     "srt/model_executor/runner_utils/capture_mode.py": ("get_is_capture_mode",),
-    "srt/model_executor/forward_batch_info.py": (
-        "forward_mode",
+    "srt/model_executor/forward_batch_info.py": ("forward_mode", "can_run_tbo"),
+    "srt/model_executor/forward_mode.py|srt/model_executor/forward_batch_info.py": (
         "is_target_verify",
-        "can_run_tbo",
     ),
     "srt/eplb/expert_distribution.py": (
         "get_global_expert_distribution_recorder",
@@ -124,6 +123,7 @@ class GlmMegakernelVerify:
     draft_extend = None
     begin_draft_round = None
     graph_variants = None
+    speculative_runtime_hooks = None
 
     def __init__(
         self,

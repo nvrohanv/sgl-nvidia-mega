@@ -27,6 +27,7 @@ SPECS = (
     ("GlmMoeDsaForCausalLM", "sgl_nvidia_mega.glm5_3.spec:SPEC"),
     # the NextN draft (ModelConfig names a GLM draft's architecture this way)
     ("GlmMoeDsaForCausalLMNextN", "sgl_nvidia_mega.glm5_3.draft:SPEC"),
+    ("MuseSparkForConditionalGeneration", "sgl_nvidia_mega.muse_spark.spec:SPEC"),
 )
 
 # Test only: with SGLANG_NVIDIA_MEGAKERNEL_PARITY_SORT_TOPK=1, the composition check
@@ -65,6 +66,15 @@ def register() -> None:
             return
     for architecture, path in SPECS:
         megakernels.register(architecture=architecture, path=path)
+    # Muse Spark's kernels hook SGLang's own forward rather than replacing a
+    # whole step; each is opt-in and default off, so this is a no-op unless a
+    # MUSE_VR_* switch is set.
+    try:
+        from sgl_nvidia_mega.muse_spark.components import register_all
+    except ImportError:
+        pass
+    else:
+        register_all()
     if os.environ.get(PARITY_SORT_ENV) == "1":
         import pkgutil
 
