@@ -169,6 +169,9 @@ SGLANG_MIRRORS = {
     "srt/layers/logits_processor.py:LogitsProcessor.forward": (
         "825a8fa668abeec6",
         "813b654dc0599824",
+        # sgl-project/sglang#47200: vocab-sharded target-verify logits (a target verify only; the draft
+        # steps take the gather as before)
+        "48c24aac22ca5303",
     ),
     "srt/layers/logits_processor.py:LogitsProcessor._get_logits": "0bfb8f2f72aa5755",
 }

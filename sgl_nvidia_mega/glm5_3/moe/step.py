@@ -25,7 +25,12 @@ SGLANG_READS = {
 # The SGLang function bodies this module's stock steps copy, by the digest of their
 # code (test/unit/test_contract.py pins them)
 SGLANG_MIRRORS = {
-    "srt/models/deepseek_v2.py:DeepseekV2DecoderLayer.forward": "228c19b34f667210",
+    # before and after sgl-project/sglang#46857 (an assert under CP decode attention
+    # TP, which the spec refuses)
+    "srt/models/deepseek_v2.py:DeepseekV2DecoderLayer.forward": (
+        "228c19b34f667210",
+        "900db5edf6e80c13",
+    ),
 }
 
 
