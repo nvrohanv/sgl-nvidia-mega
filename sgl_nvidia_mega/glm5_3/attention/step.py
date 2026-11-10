@@ -146,13 +146,26 @@ SGLANG_MIRRORS = {
         "40202da2cffe9560",
         "4f3bf6125427f3c7",
         "13dadb6e42fe43f5",
+        # sgl-project/sglang#44503 (the indexer and the unfused RoPE through the
+        # run_mla_indexer / prepare_mla_qkv hooks, whose defaults are the calls
+        # above; no SGLang class overrides them) and #38943 (the DCP extend
+        # gather): the same verify step
+        "19896b37f7714fbd",
     ),
     # before and after sgl-project/sglang#45946, which added a SAIL-only fp8 condition
     "srt/models/deepseek_common/attention_forward_methods/forward_mla.py:DeepseekMLAForwardMixin.forward_absorb_core": (
         "8a3f638957ef5cd7",
         "69ba2c4967bde418",
+        # sgl-project/sglang#44503: the W_UV projection moved into the
+        # project_mla_values hook (same branches; the bf16 bmm the spec serves)
+        "a4d250aebbab19fb",
     ),
-    "srt/layers/attention/dsa/dsa_indexer.py:Indexer.forward_cuda": "805ab11bf040ed52",
+    # before and after sgl-project/sglang#46890 (a prefill-CP condition on the
+    # split-op prefill surface; verify unchanged)
+    "srt/layers/attention/dsa/dsa_indexer.py:Indexer.forward_cuda": (
+        "805ab11bf040ed52",
+        "a2619a55994b4ec8",
+    ),
     "srt/layers/attention/dsa/dsa_indexer.py:Indexer._fused_q_prepare_and_store": "6ac8fd1c71413a93",
     # before and after sgl-project/sglang#46990, which stores and reads the KV through
     # the pool's layer router: on the DSA pool, the same set_mla_kv_buffer and
@@ -160,6 +173,9 @@ SGLANG_MIRRORS = {
     "srt/layers/attention/dsa_backend.py:DeepseekSparseAttnBackend._forward_trtllm": (
         "d31092c1f10bc4a1",
         "76c87b0740d2b05d",
+        # sgl-project/sglang#46890: prefill-CP rows narrowed before the store
+        # (no change without prefill CP)
+        "bc7b885acb04e4d7",
     ),
     # the fused top-k page table is the top-k indices on the top-k backends the spec
     # serves (attention_step_reasons); the two padding helpers are copied below
