@@ -223,9 +223,16 @@ def _moe_kernels(log):
         yield
 
 
+# every all-to-all backend check the block makes, on the SGLangs it runs on
 _NO_A2A = {
     name: (lambda: False)
-    for name in ("is_deepep", "is_deepep_v2", "is_mori", "is_ascend_fuseep")
+    for name in (
+        "is_deepep",
+        "is_deepep_v2",
+        "is_mori",
+        "is_ascend_fuseep",
+        "is_ascend_ops",
+    )
 }
 
 
@@ -1065,7 +1072,14 @@ def _gdn_build_model():
     layer = qwen3_5.Qwen3_5LinearDecoderLayer.__new__(qwen3_5.Qwen3_5LinearDecoderLayer)
     torch.nn.Module.__init__(layer)
     layer.linear_attn = SimpleNamespace(
-        attn=SimpleNamespace(layer_id=0, num_k_heads=2, num_v_heads=8),
+        # SGLang's gate parameters: A_log FP32, dt_bias in the model dtype
+        attn=SimpleNamespace(
+            layer_id=0,
+            num_k_heads=2,
+            num_v_heads=8,
+            A_log=torch.zeros(8),
+            dt_bias=torch.ones(8, dtype=torch.bfloat16),
+        ),
         norm=SimpleNamespace(weight=torch.ones(128)),
         out_proj=SimpleNamespace(weight=torch.ones(4, 4)),
     )
@@ -2131,10 +2145,17 @@ def test_trt_lowm_takes_trts_gdn_tactics_and_refuses_an_unprepared_launch(
 def test_sglangs_verify_intermediate_rows_are_the_batch_rows(monkeypatch):
     """The TensorRT-LLM front writes a request's conv windows at its batch row, as SGLang's
     target verify indexes them (verify_intermediate_state_indices: request r, row r)."""
+    from sglang.srt.layers import dp_attention
     from sglang.srt.layers.attention.linear import utils
     from sglang.srt.utils import common
 
-    monkeypatch.setattr(common, "get_eager_max_batch_size", lambda n: n)
+    # no padded batches: the bounds live in utils.common or, later, in dp_attention
+    for module, name in (
+        (common, "get_eager_max_batch_size"),
+        (dp_attention, "get_eager_max_batch_size"),
+        (dp_attention, "get_cuda_graph_max_batch_size"),
+    ):
+        monkeypatch.setattr(module, name, lambda n: n, raising=False)
     assert utils.build_verify_intermediate_state_indices(8, "cpu").tolist() == list(
         range(8)
     )
@@ -2637,7 +2658,19 @@ def test_the_skv2_cp_slot_runs_cp_lite_for_one_request_in_its_variant(
 
     class CpLite:
         def attend(
-            self, q, kv, pages, lens, q_len, bmm1, bmm2, ws, layer, fb, min_bs=None
+            self,
+            q,
+            kv,
+            pages,
+            lens,
+            q_len,
+            bmm1,
+            bmm2,
+            ws,
+            layer,
+            fb,
+            min_bs=None,
+            precise=False,
         ):
             calls.append(
                 (
@@ -2652,6 +2685,7 @@ def test_the_skv2_cp_slot_runs_cp_lite_for_one_request_in_its_variant(
                     layer is attn,
                     fb is st.fb,
                     min_bs,
+                    precise,
                 )
             )
             return out if served else None
@@ -2662,10 +2696,9 @@ def test_the_skv2_cp_slot_runs_cp_lite_for_one_request_in_its_variant(
         patch("sglang.srt.runtime_context.get_buffer", lambda name, make: None),
     ):
         o = split_kv.core(attn, q8, st)
-    # the request's 7 rows on the view's pool pages, as SKV2 takes them, at one request
     assert calls == [
         ((7, 4, 256), (3, 1, 64, 256), (16384, 16384, 256, 1), True, True, 7)
-        + (0.75 * 0.0625, 0.5, True, True, 1)
+        + (0.75 * 0.0625, 0.5, True, True, 1, True)
     ]
     if served:
         assert o.shape == (7, 1024) and bool((o == 1).all()) and len(log) == 0
@@ -2689,7 +2722,19 @@ def test_cp_slots_keep_multi_request_target_verify_in_the_plugin(monkeypatch, se
 
     class CpLite:
         def attend(
-            self, q, kv, pages, lens, q_len, bmm1, bmm2, ws, layer, fb, min_bs=None
+            self,
+            q,
+            kv,
+            pages,
+            lens,
+            q_len,
+            bmm1,
+            bmm2,
+            ws,
+            layer,
+            fb,
+            min_bs=None,
+            p2f16=False,
         ):
             calls.append(
                 (
@@ -2699,6 +2744,7 @@ def test_cp_slots_keep_multi_request_target_verify_in_the_plugin(monkeypatch, se
                     q_len,
                     fb is st.fb,
                     min_bs,
+                    p2f16,
                 )
             )
             return out if served else None
@@ -2711,7 +2757,7 @@ def test_cp_slots_keep_multi_request_target_verify_in_the_plugin(monkeypatch, se
     ):
         got = split_kv.core(attn, q8, st)
 
-    assert calls == [((rows, 4, 256), (requests, 4), (requests,), 7, True, None)]
+    assert calls == [((rows, 4, 256), (requests, 4), (requests,), 7, True, None, True)]
     if served:
         assert got.shape == (rows, 1024) and bool((got == 1).all())
         assert not log
@@ -3830,3 +3876,6 @@ def test_shared_expert_tail_uses_sglang_fp4_helpers(monkeypatch, fused):
         else ["eligible", "activation", "down"]
     )
     assert calls[0][1] is expert and calls[0][2] is gate_up
+
+
+# ------------------------------------------------- slot bt_tail
