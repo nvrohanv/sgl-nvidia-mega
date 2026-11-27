@@ -2147,15 +2147,9 @@ def test_sglangs_verify_intermediate_rows_are_the_batch_rows(monkeypatch):
     target verify indexes them (verify_intermediate_state_indices: request r, row r)."""
     from sglang.srt.layers import dp_attention
     from sglang.srt.layers.attention.linear import utils
-    from sglang.srt.utils import common
 
-    # no padded batches: the bounds live in utils.common or, later, in dp_attention
-    for module, name in (
-        (common, "get_eager_max_batch_size"),
-        (dp_attention, "get_eager_max_batch_size"),
-        (dp_attention, "get_cuda_graph_max_batch_size"),
-    ):
-        monkeypatch.setattr(module, name, lambda n: n, raising=False)
+    monkeypatch.setattr(dp_attention, "get_eager_max_batch_size", lambda n: n)
+    monkeypatch.setattr(dp_attention, "get_cuda_graph_max_batch_size", lambda n: n)
     assert utils.build_verify_intermediate_state_indices(8, "cpu").tolist() == list(
         range(8)
     )

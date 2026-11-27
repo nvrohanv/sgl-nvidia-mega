@@ -200,7 +200,7 @@ def width(experts, x: torch.Tensor) -> Width:
         WeightLayout,
         deduce_trtllm_gen_tensor_dtype,
     )
-    from sglang.srt.utils import next_power_of_2
+    from sglang.srt.utils.triton_utils import next_power_of_2
 
     from sgl_nvidia_mega.qwen3_5.moe import tactics
     from sgl_nvidia_mega.qwen3_5.sm103.moe import router

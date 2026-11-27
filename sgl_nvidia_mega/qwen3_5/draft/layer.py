@@ -119,6 +119,7 @@ def fc_input(parts, token_ids, hidden):
             lm.pre_fc_norm_hidden,
         ),
     )
+    return out
 
 
 def _fc(lm, x):

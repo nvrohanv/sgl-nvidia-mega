@@ -124,9 +124,11 @@ SGLANG_MIRRORS = {
     "srt/layers/layer_boundary/stage.py:StageBoundary._prepare": "3ade6a2952490616",
     "srt/layers/layer_boundary/stage.py:StageBoundary._prepare_attention": "ab2768d2e68434a5",
     "srt/layers/layer_boundary/stage.py:StageBoundary._prepare_input": "53b7f2a5bd394d76",
+    # sglang#50691 publishes an Ascend-only MoE input flag (read by ascend_ops)
     "srt/layers/layer_boundary/stage.py:StageBoundary._select": (
         "f317ed475a7672cf",
         "a1ab3bafed24a06c",
+        "ba73d2b3981b6208",
     ),
     "srt/layers/layer_boundary/prepare.py:_run_entry": "639740496fc09d2d",
     "srt/layers/layer_boundary/prepare.py:_reduce_update_read": "67badae13f96d80f",

@@ -80,10 +80,10 @@ SGLANG_READS = {
 
 ARCHITECTURE = "Qwen3_5MoeForConditionalGeneration"
 # The SGLang megakernel contract this spec is written against.
-API_VERSION = 2
+API_VERSION = 3
 
 REQUIREMENTS = Requirements(
-    isas=frozenset({"sm_103"}),
+    isas=frozenset({"sm_100", "sm_103"}),
     # TP8 over the two 4-GPU trays of one NVL72 rack, TP4 on one tray
     tp_sizes=frozenset({1, 2, 4, 8}),
     dtypes=frozenset({"bfloat16"}),

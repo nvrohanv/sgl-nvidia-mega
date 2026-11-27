@@ -2008,7 +2008,11 @@ def _gdn_prefill_state_case(monkeypatch, strided):
         ),
         kernel_dispatcher=SimpleNamespace(
             extend=recurrence,
-            extend_kernel=SimpleNamespace(defers_prefill_gates=False),
+            extend_kernel=SimpleNamespace(
+                defers_prefill_gates=False,
+                supports_track_state_snapshot=False,
+                extend_honors_slot_pitch=False,
+            ),
             extend_honors_slot_pitch=False,
         ),
         _prefill_gates=lambda *args: (torch.zeros(1, 4, 1), torch.zeros(1, 4, 1)),
@@ -2020,6 +2024,12 @@ def _gdn_prefill_state_case(monkeypatch, strided):
             setattr(backend, name, MethodType(method, backend))
     backend._convolve_prefill = lambda *args: (
         gdn_backend.GDNAttnBackend._convolve_prefill(backend, *args)
+    )
+    backend._prefill_kernels_follow_slot_pitch = lambda *args: (
+        gdn_backend.GDNAttnBackend._prefill_kernels_follow_slot_pitch(backend, *args)
+    )
+    backend._prefill_state_staging = lambda: (
+        gdn_backend.GDNAttnBackend._prefill_state_staging(backend)
     )
 
     def native():

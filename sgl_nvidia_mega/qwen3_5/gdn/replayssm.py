@@ -14,7 +14,8 @@ committed history, and waits for the conv's q / k / v only where it first reads 
 they come from launches before the conv. Where the launch before it also writes the
 gates b / a (slot gdn_front's verify front), ``wait_for_gate_producer`` moves the wait
 before the gates' reads, as the kernel on SGLang branch nvidia/qwen35-agentx-gb300 does;
-the arithmetic is the same.
+the arithmetic is the same. The committed-history decay is built before that wait (SGLang
+builds it after the K loop, to keep its tiles out of the loop); the same values either way.
 """
 
 from __future__ import annotations
@@ -62,7 +63,7 @@ def gdn_replayssm_spec_circular_kernel(
     beta_cache,  # fp32 beta for exact replay
     query_start_loc,  # [B+1] int  packed cu_seqlens
     ssm_state_indices,  # [B] int  physical block per request
-    replay_indices,  # [B] int  active request slot per request
+    replay_indices,  # [B] int ring row: the request row, or its request sub-pool unit
     write_pos,  # [num_replay_slots] int32
     cache_base,  # [num_replay_slots] int32
     is_flush_flags,  # [num_replay_slots] int8
@@ -103,6 +104,11 @@ def gdn_replayssm_spec_circular_kernel(
     IS_FLUSH: tl.constexpr,
     NULL_BLOCK_ID: tl.constexpr,
     DOT_PRECISION: tl.constexpr,
+    # Element strides between the replay rows of each cursor: 1 when the
+    # cursors are their own arrays, a whole entry when they sit in one.
+    STRIDE_WP: tl.constexpr = 1,
+    STRIDE_CB: tl.constexpr = 1,
+    STRIDE_FL: tl.constexpr = 1,
     USE_GDC: tl.constexpr = False,
     WAIT_FOR_GATE_PRODUCER: tl.constexpr = False,
 ):
@@ -141,7 +147,7 @@ def gdn_replayssm_spec_circular_kernel(
             if USE_GDC:
                 tl.extra.cuda.gdc_wait()
             return
-        b_is_flush = tl.load(is_flush_flags + replay_idx) != 0
+        b_is_flush = tl.load(is_flush_flags + replay_idx * STRIDE_FL) != 0
         if not b_is_flush:
             if USE_GDC:
                 tl.extra.cuda.gdc_wait()
@@ -157,19 +163,22 @@ def gdn_replayssm_spec_circular_kernel(
                 mask=full_mask,
             )
             return
-        b_is_flush = tl.load(is_flush_flags + replay_idx) != 0
+        b_is_flush = tl.load(is_flush_flags + replay_idx * STRIDE_FL) != 0
         if b_is_flush:
             if USE_GDC:
                 tl.extra.cuda.gdc_wait()
             return
 
-    b_write_pos = tl.load(write_pos + replay_idx).to(tl.int64)
-    b_cache_base = tl.load(cache_base + replay_idx).to(tl.int32)
+    b_write_pos = tl.load(write_pos + replay_idx * STRIDE_WP).to(tl.int64)
+    b_cache_base = tl.load(cache_base + replay_idx * STRIDE_CB).to(tl.int32)
 
     out_mask = mask_s[:, None] & mask_v[None, :]
 
     b_wp_i = b_write_pos.to(tl.int32)
     cache_valid = o_c < b_write_pos
+    # A row folded at its last commit has no committed history to replay; its
+    # history terms would add exact zeros, so they are skipped.
+    has_history = b_write_pos > 0
 
     # CIRCULAR physical slots (addresses only; masks/cumsums stay logical).
     phys_c = (b_cache_base + o_c) & (MAX_CACHE_LEN - 1)  # [BC] history
@@ -342,21 +351,22 @@ def gdn_replayssm_spec_circular_kernel(
                 hw_k += tl.dot(sc_tile, k_residual_T)
 
         if not IS_FLUSH:
-            # cached-key history load -> phys_c (output reconstruction only)
-            p_k = k_cache + (
-                replay_idx * stride_k_slot
-                + (i_h * MAX_CACHE_LEN + phys_c[:, None]) * K
-                + o_kt[None, :]
-            )
-            khist_tile = tl.load(
-                p_k, mask=cache_valid[:, None] & mask_kt[None, :], other=0.0
-            )
-            if STATE_FP32:
-                khist_tile = khist_tile.to(tl.float32)
-            else:
-                khist_tile = khist_tile.to(k_cache.dtype.element_ty)
-            scores_q += tl.dot(khist_tile, qT, input_precision=DOT_PRECISION)
-            scores_k += tl.dot(khist_tile, kT, input_precision=DOT_PRECISION)
+            if has_history:
+                # cached-key history load -> phys_c (output reconstruction only)
+                p_k = k_cache + (
+                    replay_idx * stride_k_slot
+                    + (i_h * MAX_CACHE_LEN + phys_c[:, None]) * K
+                    + o_kt[None, :]
+                )
+                khist_tile = tl.load(
+                    p_k, mask=cache_valid[:, None] & mask_kt[None, :], other=0.0
+                )
+                if STATE_FP32:
+                    khist_tile = khist_tile.to(tl.float32)
+                else:
+                    khist_tile = khist_tile.to(k_cache.dtype.element_ty)
+                scores_q += tl.dot(khist_tile, qT, input_precision=DOT_PRECISION)
+                scores_k += tl.dot(khist_tile, kT, input_precision=DOT_PRECISION)
 
         if write_k:
             spec_kt_mask = (
@@ -391,15 +401,25 @@ def gdn_replayssm_spec_circular_kernel(
             )
 
     if not IS_FLUSH:
-        hw_q = b_total_decay * hw_q + tl.dot(
-            b_d_scaled, scores_q.to(b_d_scaled.dtype), input_precision=DOT_PRECISION
-        )
-        hw_k = b_total_decay * hw_k + tl.dot(
-            b_d_scaled, scores_k.to(b_d_scaled.dtype), input_precision=DOT_PRECISION
-        )
+        if has_history:
+            hw_q = b_total_decay * hw_q + tl.dot(
+                b_d_scaled,
+                scores_q.to(b_d_scaled.dtype),
+                input_precision=DOT_PRECISION,
+            )
+            hw_k = b_total_decay * hw_k + tl.dot(
+                b_d_scaled,
+                scores_k.to(b_d_scaled.dtype),
+                input_precision=DOT_PRECISION,
+            )
 
     # ------------------------------------------------------------------
     # strictly-lower A and T = (I + A)^{-1}.
+    # Position i depends only on positions <= i. The causal terms below are
+    # selected, not multiplied by zero, so a non-finite later (rejected) draft
+    # cannot reach an earlier position's output or ring record. A select
+    # around a product would split its fused multiply-add, so the updates use
+    # tl.fma and the T reduction masks an operand instead.
     # ------------------------------------------------------------------
     lower = (o_s[:, None] > o_s[None, :]) & mask_s[:, None] & mask_s[None, :]
     diff_ij = G_s[:, None] - G_s[None, :]
@@ -624,6 +644,9 @@ def verify(
         DOT_PRECISION="tf32" if is_tf32_supported else "ieee",
         num_warps=num_warps,
         num_stages=num_stages,
+        STRIDE_WP=write_pos.stride(0),
+        STRIDE_CB=cache_base.stride(0),
+        STRIDE_FL=is_flush.stride(0),
         **pdl_kwargs,
     )
     return out

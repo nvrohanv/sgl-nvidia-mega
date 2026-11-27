@@ -146,10 +146,7 @@ SGLANG_MIRRORS = {
     ),
     # Importing the ReplaySSM kernel from fla/ and, after sgl-project/sglang#45112, from
     # linear/; the first goes once all supported SGLangs have the move
-    "srt/layers/attention/linear/gdn_backend.py:GDNAttnBackend._replayssm_target_verify": (
-        "28b89fa4b48b47ad",
-        "739e7115c370ac01",
-    ),
+    "srt/layers/attention/linear/gdn_backend.py:GDNAttnBackend._replayssm_target_verify": "2aec3b7168214c1d",
     "srt/layers/linear.py:RowParallelLinear.forward": (
         "b291a3c452e428a5",
         "1d5fb1eabbb87ec4",
