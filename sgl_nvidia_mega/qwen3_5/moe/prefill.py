@@ -129,7 +129,6 @@ SGLANG_READS = {
         "_resolve_forward_method",
         "is_torch_compile",
     ),
-    "kernels/aot/python/sgl_kernel/elementwise.py": ("_has_flashinfer",),
     "kernels/ops/elementwise/elementwise.py": (
         "fused_gate_sigmoid_mul_add",
         "_fused_gate_sigmoid_mul_add_kernel",
@@ -205,7 +204,10 @@ SGLANG_READS = {
 SGLANG_MIRRORS = {
     "srt/layers/layer_boundary/stage.py:StageBoundary.prepare": "f0769bf152eebade",
     "srt/layers/layer_boundary/stage.py:StageBoundary._prepare_input": "53b7f2a5bd394d76",
-    "srt/layers/layer_boundary/stage.py:StageBoundary._select": "a1ab3bafed24a06c",
+    "srt/layers/layer_boundary/stage.py:StageBoundary._select": (
+        "a1ab3bafed24a06c",
+        "ba73d2b3981b6208",
+    ),
     "srt/layers/layer_boundary/stage.py:StageBoundary._prepare": "3ade6a2952490616",
     "srt/layers/layer_boundary/prepare.py:_run_entry": "639740496fc09d2d",
     "srt/layers/layer_boundary/prepare.py:_update_read": "7d8519afcd233ad1",

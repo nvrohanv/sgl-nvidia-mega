@@ -143,6 +143,7 @@ SGLANG_MIRRORS = {
         "bfd997695f32d409",
         "6d141f9de947654f",
         "109b2f4d32797e43",
+        "590ab7ea97205370",
     ),
     # Importing the ReplaySSM kernel from fla/ and, after sgl-project/sglang#45112, from
     # linear/; the first goes once all supported SGLangs have the move

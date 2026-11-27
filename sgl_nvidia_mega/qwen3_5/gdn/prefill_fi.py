@@ -126,6 +126,7 @@ SGLANG_MIRRORS = {
     "srt/layers/attention/linear/gdn_backend.py:GDNAttnBackend.forward_extend": (
         "109b2f4d32797e43",
         "6d141f9de947654f",
+        "590ab7ea97205370",
     ),
     "srt/layers/attention/linear/kernels/gdn_flashinfer.py:FlashInferGDNKernel.extend": (
         "c3844dc2ff568b4a",
